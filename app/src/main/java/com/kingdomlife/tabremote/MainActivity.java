@@ -26,6 +26,7 @@ import android.widget.TextView;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class MainActivity extends Activity {
 
@@ -62,6 +63,7 @@ public class MainActivity extends Activity {
     private LinearLayout root;
     private TextView status;
     private Runnable repeater;
+    private final AtomicBoolean busy = new AtomicBoolean(false);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -181,7 +183,7 @@ public class MainActivity extends Activity {
                     case MotionEvent.ACTION_DOWN:
                         v.setPressed(true);
                         v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY);
-                        send(k);
+                        send(k, false);
                         if (k.repeat) startRepeat(k);
                         return true;
                     case MotionEvent.ACTION_UP:
@@ -418,8 +420,12 @@ public class MainActivity extends Activity {
         return (mode == 0 ? "Auto → " : "Manual → ") + eff;
     }
 
-    private void send(final Remotes.Key k) {
+    private void send(final Remotes.Key k) { send(k, false); }
+
+    /** isRepeat: a held-button repeat; skipped if the last signal is still sending, so presses don't pile up. */
+    private void send(final Remotes.Key k, boolean isRepeat) {
         if (k == null || k.pattern == null) return;
+        if (isRepeat && busy.get()) return;
         if (!hasIr()) {
             setStatus("No IR blaster found on this device.");
             return;
@@ -427,6 +433,7 @@ public class MainActivity extends Activity {
         int v = prefs.getInt(PREF_VARIANT, -1);
         final float scale = v >= 0 ? V_SCALE[v] : (useCycles() ? CYC : 1f);
         final int frames = v >= 0 ? V_FRAMES[v] : 1;
+        busy.set(true);
         ir.post(new Runnable() {
             @Override public void run() {
                 try {
@@ -444,6 +451,8 @@ public class MainActivity extends Activity {
                     postStatus("Sent " + k.label);
                 } catch (Exception e) {
                     postStatus("Send failed: " + e.getMessage());
+                } finally {
+                    busy.set(false);
                 }
             }
         });
@@ -453,7 +462,7 @@ public class MainActivity extends Activity {
         stopRepeat();
         repeater = new Runnable() {
             @Override public void run() {
-                send(k);
+                send(k, true);
                 ui.postDelayed(this, 140);
             }
         };

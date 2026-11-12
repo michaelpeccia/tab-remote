@@ -1,7 +1,7 @@
 # Tab Remote: setup notes
 
 An offline IR remote app for the Galaxy Tab 4 7.0 (SM-T230NU).
-Controls: Samsung TV, Vizio TV, Samsung Blu-ray. All codes are built in, so it never needs internet.
+Controls: Samsung TV, Vizio TV, Samsung Blu-ray, Roku. All codes are built in, so it never needs internet.
 
 ---
 
@@ -87,6 +87,7 @@ Every push builds a new release automatically.
 - The tabs across the top switch between **Samsung TV**, **Vizio TV**, and **Blu-ray**.
 - Hold down VOL, CH, the arrows, REW or FF to repeat.
 - **1 2 3** opens the number pad.
+- On the Roku page, POWER and volume only work on Roku TVs. Roku Streaming Sticks don't take IR at all.
 - On the Blu-ray page, the TV VOL buttons control the Samsung TV, like the real Blu-ray remote does.
 
 ## If a TV doesn't respond
@@ -118,6 +119,11 @@ gh release download --repo michaelpeccia/tab-remote --pattern TabRemote.apk --di
 Version 1.1 and later are signed with a fixed key, so they install over each other.
 (Going from 1.0 to 1.1, uninstall 1.0 first.)
 
+## This tablet's setting
+
+Timing test letter **C** (microseconds, sent 3 times) is what works on this Tab 4. It stays saved,
+but if you ever reinstall fresh, set it again in SETUP → TIMING TEST.
+
 ## Adding a device later (like the Android TV box)
 
 The codes live in `app/src/main/java/com/kingdomlife/tabremote/Remotes.java`.
@@ -136,4 +142,5 @@ Wait for the new release, download the APK, and install it over the old one (you
 
 - Samsung TV: IRDB `codes/Samsung/TV/7,7.csv` (Samsung32, device 7/7)
 - Vizio TV: IRDB `codes/Vizio/Unknown_Vizio/4,-1.csv` (NEC, device 4)
+- Roku: Flipper-IRDB Roku3 and TCL Roku TV captures (NECext EA C7; power = 57E3E817)
 - Samsung Blu-ray: Flipper-IRDB captures of BD-D5300, BD-D7500, BD-E5300 and UBD-K8500. All four send identical codes (Samsung36)

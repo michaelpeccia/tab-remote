@@ -11,6 +11,7 @@ import java.util.Map;
  * Code sources:
  *  - Samsung TV: IRDB (probonopd/irdb) codes/Samsung/TV/7,7.csv  (NECx2, device 7, subdevice 7)
  *  - Vizio TV:   IRDB codes/Vizio/Unknown_Vizio/4,-1.csv           (NEC, device 4)
+ *  - Roku: Flipper-IRDB Roku3.ir and TCL_Roku_TV.ir (NECext, address EA C7)
  *  - Samsung Blu-ray: Flipper-IRDB captures of BD-D5300, BD-D7500, BD-E5300, UBD-K8500
  *    (all four models send identical codes)
  *
@@ -64,6 +65,7 @@ final class Remotes {
         list.add(samsungTv());
         list.add(vizioTv());
         list.add(samsungBluRay());
+        list.add(roku());
         return list;
     }
 
@@ -168,6 +170,30 @@ final class Remotes {
         d.keypad.put("RETURN", k("RETURN", b("11101110100000010111")));
         d.keypad.put("0", k("0", b(digits[0])));
         d.keypad.put("ENTER", ok("OK", b("11100011100011000111")));
+        return d;
+    }
+
+    // ---------------------------------------------------------------- Roku
+    private static int[] r(int fn) { return Ir.nec(0xEA, 0xC7, fn); }
+
+    static Device roku() {
+        Device d = new Device("Roku");
+        d.power = pwr(r(0x17)); // Roku TVs only; Roku players have no power button
+        d.panel()
+                .row(d.power, k("HOME", r(0x03)))
+                .row(k("BACK", r(0x66)), k("REPLAY", r(0x78)))
+                .row(k("OPTIONS ✱", r(0x61)), k("NETFLIX", r(0x52)))
+                .row(k("HULU", r(0x4D)), k("ROKU CH", r(0x6E)));
+        d.panel()
+                .row(null, nav("▲", r(0x19)), null)
+                .row(nav("◀", r(0x1E)), ok("OK", r(0x2A)), nav("▶", r(0x2D)))
+                .row(null, nav("▼", r(0x33)), null)
+                .row(rep("REW", r(0x34)), ok("PLAY / PAUSE", r(0x4C)), rep("FF", r(0x55)));
+        // Volume works on Roku TVs; a Roku player passes volume to the TV with its own remote instead.
+        d.panel()
+                .row(rep("VOL +", r(0x0F)))
+                .row(rep("VOL −", r(0x10)))
+                .row(k("MUTE", r(0x20)));
         return d;
     }
 
