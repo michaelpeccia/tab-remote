@@ -1,0 +1,26 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.kingdomlife.tabremote'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.kingdomlife.tabremote'
+        minSdk 19          // Galaxy Tab 4 7.0 shipped with Android 4.4 KitKat
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
