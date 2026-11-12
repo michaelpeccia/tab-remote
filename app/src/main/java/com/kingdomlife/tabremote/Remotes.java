@@ -11,7 +11,7 @@ import java.util.Map;
  * Code sources:
  *  - Samsung TV: IRDB (probonopd/irdb) codes/Samsung/TV/7,7.csv  (NECx2, device 7, subdevice 7)
  *  - Vizio TV:   IRDB codes/Vizio/Unknown_Vizio/4,-1.csv           (NEC, device 4)
- *  - Roku: Flipper-IRDB Roku3.ir and TCL_Roku_TV.ir (NECext, address EA C7)
+ *  - Roku: Flipper-IRDB Roku3, TCL_Roku_TV, Roku_Standalone, Roku_4k, Roku.ir; IRDB Roku 190,239
  *  - Samsung Blu-ray: Flipper-IRDB captures of BD-D5300, BD-D7500, BD-E5300, UBD-K8500
  *    (all four models send identical codes)
  *
@@ -40,6 +40,8 @@ final class Remotes {
         final List<List<List<Key>>> panels = new ArrayList<>();
         final Map<String, Key> keypad = new LinkedHashMap<>();
         Key power;
+        /** Key the timing test sends; POWER unless set. */
+        Key test;
 
         Device(String name) { this.name = name; }
 
@@ -65,7 +67,7 @@ final class Remotes {
         list.add(samsungTv());
         list.add(vizioTv());
         list.add(samsungBluRay());
-        list.add(roku());
+        list.add(roku(0));
         return list;
     }
 
@@ -174,27 +176,51 @@ final class Remotes {
     }
 
     // ---------------------------------------------------------------- Roku
-    private static int[] r(int fn) { return Ir.nec(0xEA, 0xC7, fn); }
+    // Roku has used several code sets. The CODE SET button on the Roku tab cycles through them.
+    static final String CODESET = "__codeset__";
+    static final String[] ROKU_SET_NAMES = {"Set 1 (EA C7)", "Set 2 (EA C2)", "Set 3 (BE EF)", "Set 4 (86 05)"};
 
-    static Device roku() {
+    private static final int[][] ROKU_ADDR = {{0xEA, 0xC7}, {0xEA, 0xC2}, {0xBE, 0xEF}, {0x86, 0x05}};
+    // order: power, home, back, replay, options, up, down, left, right, ok, rew, play, ff, vol+, vol-, mute, netflix, hulu, rokuCh
+    private static final int[][] ROKU_FN = {
+            {0x17, 0x03, 0x66, 0x78, 0x61, 0x19, 0x33, 0x1E, 0x2D, 0x2A, 0x34, 0x4C, 0x55, 0x0F, 0x10, 0x20, 0x52, 0x4D, 0x6E},
+            {0x17, 0x03, 0x66, 0x78, 0x61, 0x19, 0x33, 0x1E, 0x2D, 0x2A, 0x34, 0x4C, 0x55, 0x0F, 0x10, 0x20, 0x52, 0x4D, 0x6E},
+            {-1, 0x00, -1, -1, -1, 0x01, 0x05, 0x02, 0x04, 0x03, 0x06, 0x07, 0x08, -1, -1, -1, -1, -1, -1},
+            {0x0F, 0x14, 0x1B, -1, -1, 0x42, 0x43, 0x16, 0x15, 0x18, -1, -1, -1, 0x0C, 0x0D, -1, -1, -1, -1},
+    };
+
+    static Key codesetKey(int set) { return new Key(CODESET, null, false, NORMAL); }
+
+    static Device roku(int set) {
+        final int a = ROKU_ADDR[set][0], b = ROKU_ADDR[set][1];
+        final int[] fn = ROKU_FN[set];
         Device d = new Device("Roku");
-        d.power = pwr(r(0x17)); // Roku TVs only; Roku players have no power button
+        d.power = fn[0] < 0 ? null : pwr(Ir.nec(a, b, fn[0]));
+        Key home = rk("HOME", a, b, fn[1], false, NORMAL);
+        d.test = home; // Roku players have no power, so the timing test sends HOME
         d.panel()
-                .row(d.power, k("HOME", r(0x03)))
-                .row(k("BACK", r(0x66)), k("REPLAY", r(0x78)))
-                .row(k("OPTIONS ✱", r(0x61)), k("NETFLIX", r(0x52)))
-                .row(k("HULU", r(0x4D)), k("ROKU CH", r(0x6E)));
+                .row(d.power, home)
+                .row(rk("BACK", a, b, fn[2], false, NORMAL), rk("REPLAY", a, b, fn[3], false, NORMAL))
+                .row(rk("OPTIONS ✱", a, b, fn[4], false, NORMAL), rk("NETFLIX", a, b, fn[16], false, NORMAL))
+                .row(rk("HULU", a, b, fn[17], false, NORMAL), rk("ROKU CH", a, b, fn[18], false, NORMAL))
+                .row(codesetKey(set));
         d.panel()
-                .row(null, nav("▲", r(0x19)), null)
-                .row(nav("◀", r(0x1E)), ok("OK", r(0x2A)), nav("▶", r(0x2D)))
-                .row(null, nav("▼", r(0x33)), null)
-                .row(rep("REW", r(0x34)), ok("PLAY / PAUSE", r(0x4C)), rep("FF", r(0x55)));
+                .row(null, rk("▲", a, b, fn[5], true, NAV), null)
+                .row(rk("◀", a, b, fn[7], true, NAV), rk("OK", a, b, fn[9], false, ACCENT), rk("▶", a, b, fn[8], true, NAV))
+                .row(null, rk("▼", a, b, fn[6], true, NAV), null)
+                .row(rk("REW", a, b, fn[10], true, NORMAL), rk("PLAY / PAUSE", a, b, fn[11], false, ACCENT),
+                        rk("FF", a, b, fn[12], true, NORMAL));
         // Volume works on Roku TVs; a Roku player passes volume to the TV with its own remote instead.
         d.panel()
-                .row(rep("VOL +", r(0x0F)))
-                .row(rep("VOL −", r(0x10)))
-                .row(k("MUTE", r(0x20)));
+                .row(rk("VOL +", a, b, fn[13], true, NORMAL))
+                .row(rk("VOL −", a, b, fn[14], true, NORMAL))
+                .row(rk("MUTE", a, b, fn[15], false, NORMAL));
         return d;
+    }
+
+    /** A Roku key, or null (an empty spot) when this code set has no such button. */
+    private static Key rk(String label, int a, int b, int fn, boolean repeat, int style) {
+        return fn < 0 ? null : new Key(label, Ir.nec(a, b, fn), repeat, style);
     }
 
     private Remotes() {}

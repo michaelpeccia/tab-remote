@@ -75,6 +75,7 @@ public class MainActivity extends Activity {
         ir = new Handler(irThread.getLooper());
 
         devices = Remotes.all();
+        applyRokuSet();
         current = Math.min(prefs.getInt(PREF_DEVICE, 0), devices.size() - 1);
 
         root = new LinearLayout(this);
@@ -84,6 +85,15 @@ public class MainActivity extends Activity {
         build();
 
         if (!hasIr()) setStatus("No IR blaster found. Tap SETUP for details.");
+    }
+
+    private static final String PREF_ROKU = "rokuSet";
+
+    private void applyRokuSet() {
+        int set = prefs.getInt(PREF_ROKU, 0);
+        for (int i = 0; i < devices.size(); i++) {
+            if ("Roku".equals(devices.get(i).name)) devices.set(i, Remotes.roku(set));
+        }
     }
 
     @Override
@@ -165,6 +175,20 @@ public class MainActivity extends Activity {
     }
 
     private View keyView(final Remotes.Device d, final Remotes.Key k) {
+        if (Remotes.CODESET.equals(k.label) && k.pattern == null) {
+            int set = prefs.getInt(PREF_ROKU, 0);
+            TextView t = button("CODE " + Remotes.ROKU_SET_NAMES[set], KEY_NAV, GOLD, 13);
+            t.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    int next = (prefs.getInt(PREF_ROKU, 0) + 1) % Remotes.ROKU_SET_NAMES.length;
+                    prefs.edit().putInt(PREF_ROKU, next).apply();
+                    applyRokuSet();
+                    build();
+                    setStatus("Roku " + Remotes.ROKU_SET_NAMES[next] + ". Try HOME.");
+                }
+            });
+            return t;
+        }
         if (k.isKeypad()) {
             TextView t = button("1 2 3", KEY, TEXT, 15);
             t.setOnClickListener(new View.OnClickListener() {
@@ -312,7 +336,7 @@ public class MainActivity extends Activity {
         TextView help = new TextView(this);
         help.setTextColor(TEXT);
         help.setTextSize(13);
-        help.setText("Aim at the " + d.name + ". Tap a letter to send POWER that way. "
+        help.setText("Aim at the " + d.name + ". Tap a letter to send " + (d.test != null ? d.test.label : "POWER") + " that way. "
                 + "The last letter you tap becomes the setting for every button, "
                 + "so when the TV reacts, just close this.");
         box.addView(help);
@@ -331,7 +355,7 @@ public class MainActivity extends Activity {
                     stopAuto();
                     prefs.edit().putInt(PREF_VARIANT, idx).apply();
                     big.setText(variantLabel());
-                    send(d.power);
+                    send(d.test != null ? d.test : d.power != null ? d.power : firstKey(d));
                 }
             });
             row.addView(b, weighted(1f, dp(54)));
@@ -349,7 +373,7 @@ public class MainActivity extends Activity {
                         if (i >= V_LABEL.length) { big.setText("Done. Which letter worked?"); autoTest = null; return; }
                         prefs.edit().putInt(PREF_VARIANT, i).apply();
                         big.setText("Sending " + V_LABEL[i] + "  (" + V_DESC[i] + ")");
-                        send(d.power);
+                        send(d.test != null ? d.test : d.power != null ? d.power : firstKey(d));
                         i++;
                         ui.postDelayed(this, 3000);
                     }
@@ -380,6 +404,15 @@ public class MainActivity extends Activity {
             @Override public void onDismiss(android.content.DialogInterface di) { stopAuto(); }
         });
         dlg.show();
+    }
+
+    /** For devices without POWER (some Roku code sets), the timing test sends the first real key instead. */
+    private Remotes.Key firstKey(Remotes.Device d) {
+        for (List<List<Remotes.Key>> p : d.panels)
+            for (List<Remotes.Key> r : p)
+                for (Remotes.Key k : r)
+                    if (k != null && k.pattern != null) return k;
+        return null;
     }
 
     private void stopAuto() {

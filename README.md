@@ -88,6 +88,8 @@ Every push builds a new release automatically.
 - Hold down VOL, CH, the arrows, REW or FF to repeat.
 - **1 2 3** opens the number pad.
 - On the Roku page, POWER and volume only work on Roku TVs. Roku Streaming Sticks don't take IR at all.
+- If the Roku doesn't respond, tap **CODE SET** on the Roku page to switch between the 4 Roku code sets, pressing HOME after each.
+  The timing test on the Roku page sends HOME instead of POWER.
 - On the Blu-ray page, the TV VOL buttons control the Samsung TV, like the real Blu-ray remote does.
 
 ## If a TV doesn't respond
