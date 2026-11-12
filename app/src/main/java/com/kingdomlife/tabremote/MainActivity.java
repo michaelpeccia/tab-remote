@@ -40,6 +40,16 @@ public class MainActivity extends Activity {
     private static final String PREFS = "tabremote";
     private static final String PREF_DEVICE = "device";
     private static final String PREF_TIMING = "timing"; // 0 auto, 1 microseconds, 2 carrier cycles
+    private static final String PREF_VARIANT = "variant"; // -1 = use timing mode, else index into VARIANTS
+
+    /** Timing variants for the diagnostic: label, scale applied to every duration, frames sent. */
+    private static final String[] V_LABEL = {"A", "B", "C", "D", "E", "F", "G", "H"};
+    private static final String[] V_DESC = {
+            "microseconds", "carrier cycles", "microseconds x3", "carrier cycles x3",
+            "double length", "half length", "cycles double", "cycles half"};
+    private static final float CYC = Ir.FREQ / 1000000f;
+    private static final float[] V_SCALE = {1f, CYC, 1f, CYC, 2f, 0.5f, CYC * 2f, CYC * 0.5f};
+    private static final int[] V_FRAMES = {1, 1, 3, 3, 1, 1, 1, 1};
 
     private final Handler ui = new Handler(Looper.getMainLooper());
     private HandlerThread irThread;
@@ -254,8 +264,9 @@ public class MainActivity extends Activity {
                 }
             } catch (Exception ignored) { }
         }
-        sb.append("\nTiming mode: ").append(timingLabel()).append("\n\n");
-        sb.append("If buttons send but nothing reacts, switch the timing mode and try POWER again. ")
+        sb.append("\nTiming mode: ").append(timingLabel()).append("\n");
+        sb.append(variantLabel()).append("\n\n");
+        sb.append("If buttons send but nothing reacts, open Timing test. ")
                 .append("Older KitKat builds (4.4.2 and earlier) count carrier cycles instead of microseconds.");
 
         final AlertDialog dlg = new AlertDialog.Builder(this, AlertDialog.THEME_HOLO_DARK)
@@ -263,7 +274,7 @@ public class MainActivity extends Activity {
                 .setMessage(sb.toString())
                 .setPositiveButton("Close", null)
                 .setNeutralButton("Change timing", null)
-                .setNegativeButton("Test POWER", null)
+                .setNegativeButton("Timing test", null)
                 .create();
         dlg.show();
         dlg.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(new View.OnClickListener() {
@@ -275,8 +286,108 @@ public class MainActivity extends Activity {
             }
         });
         dlg.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { send(devices.get(current).power); }
+            @Override public void onClick(View v) { dlg.dismiss(); showDiagnostic(); }
         });
+    }
+
+    private Runnable autoTest;
+
+    private void showDiagnostic() {
+        final Remotes.Device d = devices.get(current);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(12), dp(8), dp(12), dp(8));
+        box.setBackgroundColor(BG);
+
+        final TextView big = new TextView(this);
+        big.setTextColor(GOLD);
+        big.setTextSize(22);
+        big.setTypeface(Typeface.DEFAULT_BOLD);
+        big.setGravity(Gravity.CENTER);
+        big.setText(variantLabel());
+        box.addView(big, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(48)));
+
+        TextView help = new TextView(this);
+        help.setTextColor(TEXT);
+        help.setTextSize(13);
+        help.setText("Aim at the " + d.name + ". Tap a letter to send POWER that way. "
+                + "The last letter you tap becomes the setting for every button, "
+                + "so when the TV reacts, just close this.");
+        box.addView(help);
+
+        LinearLayout row = null;
+        for (int i = 0; i < V_LABEL.length; i++) {
+            if (i % 4 == 0) {
+                row = new LinearLayout(this);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                box.addView(row);
+            }
+            final int idx = i;
+            TextView b = button(V_LABEL[i], KEY_NAV, TEXT, 20);
+            b.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) {
+                    stopAuto();
+                    prefs.edit().putInt(PREF_VARIANT, idx).apply();
+                    big.setText(variantLabel());
+                    send(d.power);
+                }
+            });
+            row.addView(b, weighted(1f, dp(54)));
+        }
+
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        final TextView auto = button("AUTO TEST (A to H)", GOLD, BG, 14);
+        auto.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                stopAuto();
+                autoTest = new Runnable() {
+                    int i = 0;
+                    @Override public void run() {
+                        if (i >= V_LABEL.length) { big.setText("Done. Which letter worked?"); autoTest = null; return; }
+                        prefs.edit().putInt(PREF_VARIANT, i).apply();
+                        big.setText("Sending " + V_LABEL[i] + "  (" + V_DESC[i] + ")");
+                        send(d.power);
+                        i++;
+                        ui.postDelayed(this, 3000);
+                    }
+                };
+                ui.post(autoTest);
+            }
+        });
+        TextView reset = button("RESET", KEY, TEXT, 14);
+        reset.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                stopAuto();
+                prefs.edit().putInt(PREF_VARIANT, -1).apply();
+                big.setText(variantLabel());
+            }
+        });
+        bottom.addView(auto, weighted(2f, dp(50)));
+        bottom.addView(reset, weighted(1f, dp(50)));
+        box.addView(bottom);
+
+        ScrollView sv = new ScrollView(this);
+        sv.addView(box);
+        AlertDialog dlg = new AlertDialog.Builder(this, AlertDialog.THEME_HOLO_DARK)
+                .setTitle("Timing test")
+                .setView(sv)
+                .setPositiveButton("Close", null)
+                .create();
+        dlg.setOnDismissListener(new android.content.DialogInterface.OnDismissListener() {
+            @Override public void onDismiss(android.content.DialogInterface di) { stopAuto(); }
+        });
+        dlg.show();
+    }
+
+    private void stopAuto() {
+        if (autoTest != null) { ui.removeCallbacks(autoTest); autoTest = null; }
+    }
+
+    private String variantLabel() {
+        int v = prefs.getInt(PREF_VARIANT, -1);
+        return v < 0 ? "Using: timing mode (" + (useCycles() ? "cycles" : "microseconds") + ")"
+                : "Using: " + V_LABEL[v] + "  (" + V_DESC[v] + ")";
     }
 
     // ------------------------------------------------------------------ IR
@@ -291,9 +402,9 @@ public class MainActivity extends Activity {
 
     private boolean autoCycles() {
         // Before Android 4.4.3 the pattern was interpreted as carrier cycles, not microseconds.
+        // Go by API level: some custom ROMs report a fake version name.
         String r = Build.VERSION.RELEASE;
-        return Build.VERSION.SDK_INT == 19
-                && ("4.4".equals(r) || "4.4.1".equals(r) || "4.4.2".equals(r));
+        return Build.VERSION.SDK_INT == 19 && !"4.4.3".equals(r) && !"4.4.4".equals(r);
     }
 
     private boolean useCycles() {
@@ -313,17 +424,21 @@ public class MainActivity extends Activity {
             setStatus("No IR blaster found on this device.");
             return;
         }
-        final boolean cycles = useCycles();
+        int v = prefs.getInt(PREF_VARIANT, -1);
+        final float scale = v >= 0 ? V_SCALE[v] : (useCycles() ? CYC : 1f);
+        final int frames = v >= 0 ? V_FRAMES[v] : 1;
         ir.post(new Runnable() {
             @Override public void run() {
                 try {
-                    int[] p = k.pattern;
-                    if (cycles) {
-                        int[] c = new int[p.length];
-                        for (int i = 0; i < p.length; i++) {
-                            c[i] = Math.max(1, Math.round(p[i] * (Ir.FREQ / 1000000f)));
-                        }
-                        p = c;
+                    int[] f = k.pattern;
+                    int[] p = new int[f.length * frames + (frames - 1)];
+                    int n = 0;
+                    for (int r = 0; r < frames; r++) {
+                        if (r > 0) p[n++] = 45000; // gap between repeated frames
+                        for (int x : f) p[n++] = x;
+                    }
+                    if (scale != 1f) {
+                        for (int i = 0; i < p.length; i++) p[i] = Math.max(1, Math.round(p[i] * scale));
                     }
                     irManager.transmit(Ir.FREQ, p);
                     postStatus("Sent " + k.label);

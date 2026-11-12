@@ -31,6 +31,41 @@ git push -u origin main
 > No PC handy? On the new repo page, click **uploading an existing file** and drag
 > in everything inside the TabRemote folder, including the `.github` folder.
 
+## 1b. Or push it from Termux on the phone
+
+Your usual Termux token can't push workflow files, so this uses the GitHub CLI (`gh`)
+signed in with the `workflow` permission. It also creates the repo for you, so skip step 1.
+First save `TabRemote.zip` to the phone's Download folder.
+
+```bash
+# one time: tools + sign in (choose "Login with a web browser", copy the code it shows)
+pkg install -y git gh unzip
+gh auth login -h github.com -p https -w -s workflow
+gh auth setup-git
+
+# unpack the project
+cd ~ && rm -rf TabRemote
+unzip -q /storage/emulated/0/Download/TabRemote.zip -d ~
+cd ~/TabRemote
+
+# commit, create the repo, push
+git init -b main
+git add .
+git commit -m "Tab Remote v1"
+gh repo create tab-remote --public --source=. --remote=origin --push
+
+# watch the build (Ctrl+C to stop watching)
+gh run watch --repo michaelpeccia/tab-remote
+
+# when it's green, grab the APK into the phone's Download folder
+gh release download --repo michaelpeccia/tab-remote --pattern TabRemote.apk --dir /storage/emulated/0/Download --clobber
+```
+
+If `git commit` asks who you are, run these once and commit again:
+`git config --global user.name "Michael Ben Yah"` and `git config --global user.email "michaelbenyah@kingdom-life-ministry.com"`
+
+Later updates from Termux: `cd ~/TabRemote && git add . && git commit -m "Update" && git push`
+
 ## 2. Get the APK
 
 1. On the repo page, open the **Actions** tab. Wait for "Build APK" to show a green check (about 3 to 5 minutes).
@@ -60,10 +95,28 @@ Every push builds a new release automatically.
    and press POWER. You should see a purple flash on the phone screen.
    - Flash but no reaction → go to step 2.
    - No flash → tap **SETUP**. If it says "IR blaster: NOT found", the current ROM is missing the IR driver.
-2. **Change the timing mode.** Tap **SETUP → Change timing**, then **Test POWER**. Try all three modes
-   (Auto, Manual microseconds, Manual carrier cycles). Older KitKat builds (4.4.2 and earlier)
-   need carrier cycles, while CyanogenMod / Android 5+ needs microseconds. Auto picks one based on the Android version.
+2. **Run the timing test.** Tap **SETUP → TIMING TEST**. Tap **AUTO TEST** and watch the TV:
+   it sends POWER eight different ways (A to H), three seconds apart, and shows which letter it's on.
+   When the TV reacts, note the letter, then tap that letter. Whatever letter you tap last
+   becomes the setting for every button. **RESET** goes back to the normal timing mode.
 3. Get closer and aim straight at the TV. Tablet IR blasters are weaker than real remotes.
+
+## Updating to a new version from Termux
+
+Save the new `TabRemote.zip` to the phone's Download folder, then:
+
+```bash
+cd ~ && unzip -o -q /storage/emulated/0/Download/TabRemote.zip -d ~
+cd ~/TabRemote
+git add .
+git commit -m "Update"
+git push
+gh run watch --repo michaelpeccia/tab-remote
+gh release download --repo michaelpeccia/tab-remote --pattern TabRemote.apk --dir /storage/emulated/0/Download --clobber
+```
+
+Version 1.1 and later are signed with a fixed key, so they install over each other.
+(Going from 1.0 to 1.1, uninstall 1.0 first.)
 
 ## Adding a device later (like the Android TV box)
 
